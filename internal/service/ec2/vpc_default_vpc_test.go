@@ -211,7 +211,6 @@ func testAccDefaultVPC_Existing_forceDestroy(t *testing.T) {
 					acctest.CheckVPCExists(ctx, t, resourceName, &v),
 					resource.TestCheckResourceAttr(resourceName, "existing_default_vpc", acctest.CtTrue),
 					resource.TestCheckResourceAttr(resourceName, names.AttrForceDestroy, acctest.CtTrue),
-					testAccCheckDefaultVPCEmpty(ctx, t, &v),
 				),
 			},
 		},
@@ -333,7 +332,6 @@ func testAccDefaultVPC_NotFound_forceDestroy(t *testing.T) {
 					acctest.CheckVPCExists(ctx, t, resourceName, &v),
 					resource.TestCheckResourceAttr(resourceName, "existing_default_vpc", acctest.CtFalse),
 					resource.TestCheckResourceAttr(resourceName, names.AttrForceDestroy, acctest.CtTrue),
-					testAccCheckDefaultVPCEmpty(ctx, t, &v),
 				),
 			},
 		},
@@ -485,13 +483,6 @@ func testAccCheckDefaultVPCDestroyNotFound(ctx context.Context, t *testing.T) re
 		}
 
 		return nil
-	}
-}
-
-// testAccCheckDefaultVPCEmpty returns a TestCheckFunc that empties the specified default VPC.
-func testAccCheckDefaultVPCEmpty(ctx context.Context, t *testing.T, v *awstypes.Vpc) resource.TestCheckFunc {
-	return func(s *terraform.State) error {
-		return testAccEmptyDefaultVPC(ctx, t, aws.ToString(v.VpcId))
 	}
 }
 

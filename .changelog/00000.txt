@@ -1,0 +1,3 @@
+```release-note:bug
+resource/aws_default_vpc: Fix `DependencyViolation` errors on destroy when `force_destroy` is `true` by first deleting the internet gateway and default subnets that come with a default VPC
+```

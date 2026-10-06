@@ -292,10 +292,69 @@ func resourceDefaultVPCCreate(ctx context.Context, d *schema.ResourceData, meta 
 func resourceDefaultVPCDelete(ctx context.Context, d *schema.ResourceData, meta any) diag.Diagnostics {
 	var diags diag.Diagnostics
 	if d.Get(names.AttrForceDestroy).(bool) {
+		// A default VPC comes with an attached internet gateway and one default subnet per
+		// Availability Zone, none of which are managed by this resource. DeleteVpc fails with
+		// DependencyViolation until they are gone, so remove them first.
+		if diags = emptyDefaultVPC(ctx, d.Id(), meta); diags.HasError() {
+			return diags
+		}
+
 		return append(diags, resourceVPCDelete(ctx, d, meta)...)
 	}
 
 	log.Printf("[WARN] EC2 Default VPC (%s) not deleted, removing from state", d.Id())
+
+	return diags
+}
+
+// emptyDefaultVPC detaches and deletes the default VPC's internet gateways and deletes its
+// default subnets so that the VPC itself can be deleted.
+func emptyDefaultVPC(ctx context.Context, vpcID string, meta any) diag.Diagnostics {
+	var diags diag.Diagnostics
+	conn := meta.(*conns.AWSClient).EC2Client(ctx)
+
+	igws, err := findInternetGateways(ctx, conn, &ec2.DescribeInternetGatewaysInput{
+		Filters: newAttributeFilterList(map[string]string{
+			"attachment.vpc-id": vpcID,
+		}),
+	})
+
+	if err != nil {
+		return sdkdiag.AppendErrorf(diags, "reading EC2 Internet Gateways for EC2 Default VPC (%s): %s", vpcID, err)
+	}
+
+	for _, v := range igws {
+		r := resourceInternetGateway()
+		rd := r.Data(nil)
+		rd.SetId(aws.ToString(v.InternetGatewayId))
+		rd.Set(names.AttrVPCID, vpcID)
+
+		if diags = append(diags, resourceInternetGatewayDelete(ctx, rd, meta)...); diags.HasError() {
+			return diags
+		}
+	}
+
+	subnets, err := findSubnets(ctx, conn, &ec2.DescribeSubnetsInput{
+		Filters: newAttributeFilterList(map[string]string{
+			"defaultForAz": "true",
+			"vpc-id":       vpcID,
+		}),
+	})
+
+	if err != nil {
+		return sdkdiag.AppendErrorf(diags, "reading EC2 Default Subnets for EC2 Default VPC (%s): %s", vpcID, err)
+	}
+
+	for _, v := range subnets {
+		r := resourceSubnet()
+		rd := r.Data(nil)
+		rd.SetId(aws.ToString(v.SubnetId))
+		rd.Set(names.AttrVPCID, vpcID)
+
+		if diags = append(diags, resourceSubnetDelete(ctx, rd, meta)...); diags.HasError() {
+			return diags
+		}
+	}
 
 	return diags
 }
